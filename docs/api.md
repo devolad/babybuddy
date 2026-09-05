@@ -87,6 +87,41 @@ curl -X GET https://[...]/api/profile -H 'Authorization: Token [...]'
 All fields are read-only. The `api_key` value is the same token shown on the
 User Settings page and used for [Authentication](#authentication).
 
+## Medication
+
+The `/api/medication/` endpoint records medication doses for a child. It supports
+the same `GET`, `OPTIONS`, `POST`, `PATCH`, and `DELETE` methods as the other
+model endpoints.
+
+```shell
+curl -X GET https://[...]/api/medication/1/ -H 'Authorization: Token [...]'
+```
+
+```json
+{
+  "id": 1,
+  "child": 3,
+  "name": "Acetaminophen",
+  "dosage": 2.5,
+  "dosage_unit": "ml",
+  "time": "2020-03-12T14:30:00.000000-07:00",
+  "next_dose_interval": "04:00:00",
+  "notes": "",
+  "tags": []
+}
+```
+
+`dosage` and `next_dose_interval` may be `null` when unset. When set,
+`next_dose_interval` is a duration (e.g. `04:00:00`) until the next dose may be
+given. `dosage_unit` is one of `mg`, `ml`, `tablets`, or `drops` (may be an
+empty string when unset).
+
+List filters include `child`, `name`, `dosage_unit`, `tags`, and
+`date` / `date_min` / `date_max`. Despite the `date*` names, those filters are
+ISO 8601 **datetime** filters on the `time` field (same pattern as other timed
+endpoints), for example `2020-03-12T14:30:00-07:00` — not bare `YYYY-MM-DD`
+dates.
+
 ## `GET` Method
 
 ### Request
@@ -143,29 +178,6 @@ curl -X GET https://[...]/api/sleep/1/ -H 'Authorization: Token [...]'
   "nap": false
 }
 ```
-
-```shell
-curl -X GET https://[...]/api/medication/1/ -H 'Authorization: Token [...]'
-```
-
-```json
-{
-  "id": 1,
-  "child": 3,
-  "name": "Acetaminophen",
-  "dosage": 2.5,
-  "dosage_unit": "ml",
-  "time": "2020-03-12T14:30:00.000000-07:00",
-  "next_dose_interval": "04:00:00",
-  "notes": "",
-  "tags": []
-}
-```
-
-Medication entries support filters including `child`, `name`, `dosage_unit`
-(`mg`, `ml`, `tablets`, `drops`), `date` / `date_min` / `date_max`, and `tags`.
-The optional `next_dose_interval` is a duration (e.g. `04:00:00`) until the next
-dose may be given.
 
 ### Response
 
