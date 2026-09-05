@@ -78,7 +78,7 @@ curl -X GET https://[...]/api/profile -H 'Authorization: Token [...]'
     "email": "admin@example.com",
     "is_staff": true
   },
-  "language": "en",
+  "language": "en-US",
   "timezone": "UTC",
   "api_key": "2h23807gd72h7hop382p98hd823dw3g665g56"
 }
