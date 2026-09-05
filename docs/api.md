@@ -17,6 +17,7 @@ Currently, the following endpoints are available for `GET`, `OPTIONS`, and
 - `/api/feedings/`
 - `/api/head-circumference/`
 - `/api/height/`
+- `/api/medication/`
 - `/api/notes/`
 - `/api/pumping/`
 - `/api/sleep/`
@@ -25,6 +26,10 @@ Currently, the following endpoints are available for `GET`, `OPTIONS`, and
 - `/api/timers/`
 - `/api/tummy-times/`
 - `/api/weight/`
+
+In addition, the following read-only endpoint is available for `GET` requests:
+
+- `/api/profile`
 
 ## Authentication
 
@@ -52,6 +57,35 @@ The API schema in [OpenAPI format](https://swagger.io/specification/) can be
 found in the [`openapi-schema.yml`](https://github.com/babybuddy/babybuddy/tree/master/openapi-schema.yml)
 file in the project root. A live version is also available at the `/api/schema` path of
 a running instance.
+
+## Profile
+
+The `/api/profile` endpoint returns settings for the currently authenticated
+user. Unlike the model endpoints above, it only supports `GET` (no create,
+update, or delete).
+
+```shell
+curl -X GET https://[...]/api/profile -H 'Authorization: Token [...]'
+```
+
+```json
+{
+  "user": {
+    "id": 1,
+    "username": "admin",
+    "first_name": "",
+    "last_name": "",
+    "email": "admin@example.com",
+    "is_staff": true
+  },
+  "language": "en",
+  "timezone": "UTC",
+  "api_key": "2h23807gd72h7hop382p98hd823dw3g665g56"
+}
+```
+
+All fields are read-only. The `api_key` value is the same token shown on the
+User Settings page and used for [Authentication](#authentication).
 
 ## `GET` Method
 
@@ -109,6 +143,29 @@ curl -X GET https://[...]/api/sleep/1/ -H 'Authorization: Token [...]'
   "nap": false
 }
 ```
+
+```shell
+curl -X GET https://[...]/api/medication/1/ -H 'Authorization: Token [...]'
+```
+
+```json
+{
+  "id": 1,
+  "child": 3,
+  "name": "Acetaminophen",
+  "dosage": 2.5,
+  "dosage_unit": "ml",
+  "time": "2020-03-12T14:30:00.000000-07:00",
+  "next_dose_interval": "04:00:00",
+  "notes": "",
+  "tags": []
+}
+```
+
+Medication entries support filters including `child`, `name`, `dosage_unit`
+(`mg`, `ml`, `tablets`, `drops`), `date` / `date_min` / `date_max`, and `tags`.
+The optional `next_dose_interval` is a duration (e.g. `04:00:00`) until the next
+dose may be given.
 
 ### Response
 
