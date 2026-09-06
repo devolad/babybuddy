@@ -57,5 +57,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.github_token }}
           REQUIREMENTS: docs/requirements.txt
-
-# fork: ensure Actions workflows are registered
