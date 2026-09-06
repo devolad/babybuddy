@@ -1,9 +1,9 @@
 # Local single-instance Baby Buddy (SQLite via LinuxServer /config volume).
 # No app source changes. Stock image; data stays on a dedicated host volume.
+# Omit fixed container_name so a second local stack can run with another project/dir.
 services:
   babybuddy:
     image: lscr.io/linuxserver/babybuddy:latest
-    container_name: babybuddy-local
     environment:
       PUID: ${PUID:-1000}
       PGID: ${PGID:-1000}
