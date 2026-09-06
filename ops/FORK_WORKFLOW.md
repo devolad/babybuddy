@@ -4,12 +4,12 @@ Short process for where to push and how to merge. No application code changes.
 
 ## Baseline (as of this doc)
 
-| Item | Value |
-| --- | --- |
-| Working repo | `devolad/babybuddy` (fork only) |
-| Default branch | `master` |
-| Upstream | `babybuddy/babybuddy` (reference / sync source; not a default PR target) |
-| Known tip when written | `87570d32` on both fork `master` and upstream `master` |
+| Item                   | Value                                                                    |
+| ---------------------- | ------------------------------------------------------------------------ |
+| Working repo           | `devolad/babybuddy` (fork only)                                          |
+| Default branch         | `master`                                                                 |
+| Upstream               | `babybuddy/babybuddy` (reference / sync source; not a default PR target) |
+| Known tip when written | `87570d32` on both fork `master` and upstream `master`                   |
 
 Topic branches on the fork may exist for experiments; they are not merge targets unless opened as a PR into fork `master`.
 
