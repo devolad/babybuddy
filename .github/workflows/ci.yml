@@ -42,7 +42,8 @@ jobs:
     environment:
       name: documentation
       url: https://docs.baby-buddy.net
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+    # Upstream-only: do not deploy official docs from this fork.
+    if: ${{ github.repository == 'babybuddy/babybuddy' && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
     steps:
       - uses: actions/checkout@v6
       - name: Get changed files
