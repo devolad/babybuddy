@@ -70,6 +70,25 @@ def set_initial_values(kwargs, form_type):
                 last_feed_args["method"] = last_method
             kwargs["initial"].update(last_feed_args)
 
+    # Prefill medication fields from the child's most recent dose.
+    if form_type == MedicationForm and "child" in kwargs["initial"]:
+        last_medication = (
+            models.Medication.objects.filter(child=kwargs["initial"]["child"])
+            .order_by("time")
+            .last()
+        )
+        if last_medication:
+            last_med_args = {
+                "name": last_medication.name,
+                "dosage": last_medication.dosage,
+                "dosage_unit": last_medication.dosage_unit,
+            }
+            if last_medication.next_dose_interval:
+                last_med_args["next_dose_interval"] = (
+                    last_medication.next_dose_interval.total_seconds() / 3600
+                )
+            kwargs["initial"].update(last_med_args)
+
     # Set default "nap" value for Sleep instances.
     if form_type == SleepForm and "nap" not in kwargs["initial"]:
         try:
@@ -403,6 +422,59 @@ class MedicationForm(CoreModelForm, TaggableModelForm):
         if self.instance and self.instance.next_dose_interval:
             total_seconds = self.instance.next_dose_interval.total_seconds()
             self.initial["next_dose_interval"] = total_seconds / 3600
+
+        # Child-scoped datalist of previously entered medication names.
+        # Empty when no child is known yet (e.g. multi-child add without
+        # ?child=); options are distinct names for that child only.
+        self.medication_name_suggestions = []
+        child = self._resolve_medication_child()
+        if child:
+            self.medication_name_suggestions = (
+                self._medication_name_suggestions_for_child(child)
+            )
+            if self.medication_name_suggestions:
+                self.fields["name"].widget.attrs["list"] = "medication-name-list"
+
+    def _resolve_medication_child(self):
+        if self.is_bound:
+            child_id = self.data.get("child")
+            if child_id:
+                return models.Child.objects.filter(pk=child_id).first()
+        child = self.initial.get("child")
+        if child:
+            return child
+        if self.instance and getattr(self.instance, "child_id", None):
+            return self.instance.child
+        return None
+
+    @staticmethod
+    def _medication_name_suggestions_for_child(child):
+        """
+        Distinct medication names for a child, recent-first.
+
+        Each option carries the most recent dosage, unit, and interval for
+        that name so the datalist selection can prefill those fields.
+        """
+        suggestions = []
+        seen = set()
+        queryset = models.Medication.objects.filter(child=child).order_by("-time")
+        for medication in queryset:
+            if medication.name in seen:
+                continue
+            seen.add(medication.name)
+            interval_hours = ""
+            if medication.next_dose_interval:
+                hours = medication.next_dose_interval.total_seconds() / 3600
+                interval_hours = int(hours) if hours == int(hours) else hours
+            suggestions.append(
+                {
+                    "name": medication.name,
+                    "dosage": ("" if medication.dosage is None else medication.dosage),
+                    "dosage_unit": medication.dosage_unit or "",
+                    "next_dose_interval": interval_hours,
+                }
+            )
+        return suggestions
 
     def clean_next_dose_interval(self):
         hours = self.cleaned_data.get("next_dose_interval")

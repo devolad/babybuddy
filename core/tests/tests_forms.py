@@ -137,6 +137,44 @@ class InitialValuesTestCase(FormsTestCaseBase):
         self.assertEqual(page.context["form"].initial["type"], f_three.type)
         self.assertEqual(page.context["form"].initial["method"], f_three.method)
 
+    def test_medication_last_dose(self):
+        child_two = models.Child.objects.create(
+            first_name="Child", last_name="Two", birth_date=timezone.localdate()
+        )
+        models.Medication.objects.create(
+            child=self.child,
+            name="Tylenol",
+            dosage=5.0,
+            dosage_unit="ml",
+            time=timezone.localtime() - timezone.timedelta(hours=3),
+            next_dose_interval=timezone.timedelta(hours=4),
+        )
+        models.Medication.objects.create(
+            child=child_two,
+            name="Ibuprofen",
+            dosage=2.5,
+            dosage_unit="ml",
+            time=timezone.localtime() - timezone.timedelta(hours=1),
+            next_dose_interval=timezone.timedelta(hours=6),
+        )
+
+        page = self.c.get("/medication/add/")
+        # One child in DB from base setup was joined by child_two; without
+        # ?child= and with multiple children, child is not auto-selected.
+        self.assertTrue("name" not in page.context["form"].initial)
+
+        page = self.c.get("/medication/add/?child={}".format(self.child.slug))
+        self.assertEqual(page.context["form"].initial["name"], "Tylenol")
+        self.assertEqual(page.context["form"].initial["dosage"], 5.0)
+        self.assertEqual(page.context["form"].initial["dosage_unit"], "ml")
+        self.assertEqual(page.context["form"].initial["next_dose_interval"], 4.0)
+
+        page = self.c.get("/medication/add/?child={}".format(child_two.slug))
+        self.assertEqual(page.context["form"].initial["name"], "Ibuprofen")
+        self.assertEqual(page.context["form"].initial["dosage"], 2.5)
+        self.assertEqual(page.context["form"].initial["dosage_unit"], "ml")
+        self.assertEqual(page.context["form"].initial["next_dose_interval"], 6.0)
+
     def test_start_end_set_from_timer(self):
         page = self.c.get("/sleep/add/?timer={}".format(self.timer.id))
         self.assertTrue("start" in page.context["form"].initial)
@@ -1186,4 +1224,168 @@ class MedicationFormsTestCase(FormsTestCaseBase):
         self.assertEqual(page.status_code, 200)
         self.assertFormError(
             page.context["form"], "time", "Date/time can not be in the future."
+        )
+
+    def test_medication_name_datalist_child_scoped(self):
+        child_two = models.Child.objects.create(
+            first_name="Child", last_name="Two", birth_date=timezone.localdate()
+        )
+        models.Medication.objects.create(
+            child=child_two,
+            name="Ibuprofen",
+            dosage=2.5,
+            dosage_unit="ml",
+            time=timezone.localtime() - timezone.timedelta(hours=1),
+        )
+        # Older duplicate name for self.child should not replace newer suggestion.
+        models.Medication.objects.create(
+            child=self.child,
+            name="Tylenol",
+            dosage=2.5,
+            dosage_unit="ml",
+            time=timezone.localtime() - timezone.timedelta(hours=5),
+        )
+
+        page = self.c.get("/medication/add/?child={}".format(self.child.slug))
+        self.assertEqual(page.status_code, 200)
+        form = page.context["form"]
+        names = [s["name"] for s in form.medication_name_suggestions]
+        self.assertIn("Tylenol", names)
+        self.assertNotIn("Ibuprofen", names)
+        tylenol = next(
+            s for s in form.medication_name_suggestions if s["name"] == "Tylenol"
+        )
+        # Most recent Tylenol for this child is the setUpClass entry (5.0 ml).
+        self.assertEqual(tylenol["dosage"], 5.0)
+        self.assertEqual(tylenol["dosage_unit"], "ml")
+        self.assertEqual(tylenol["next_dose_interval"], 4)
+        self.assertContains(page, 'id="medication-name-list"')
+        self.assertContains(page, 'list="medication-name-list"')
+        self.assertContains(page, 'value="Tylenol"')
+        self.assertNotContains(page, 'value="Ibuprofen"')
+
+    def test_medication_name_datalist_empty_without_child(self):
+        models.Child.objects.create(
+            first_name="Child", last_name="Two", birth_date=timezone.localdate()
+        )
+        page = self.c.get("/medication/add/")
+        self.assertEqual(page.status_code, 200)
+        form = page.context["form"]
+        self.assertEqual(form.medication_name_suggestions, [])
+        self.assertNotContains(page, 'id="medication-name-list"')
+
+    def test_medication_name_datalist_empty_dosage_and_interval(self):
+        """Suggestions without dosage/interval expose empty-string data attrs."""
+        models.Medication.objects.create(
+            child=self.child,
+            name="Saline Rinse",
+            dosage=None,
+            dosage_unit="",
+            time=timezone.localtime() - timezone.timedelta(hours=1),
+            next_dose_interval=None,
+        )
+
+        page = self.c.get("/medication/add/?child={}".format(self.child.slug))
+        self.assertEqual(page.status_code, 200)
+        form = page.context["form"]
+        saline = next(
+            s for s in form.medication_name_suggestions if s["name"] == "Saline Rinse"
+        )
+        self.assertEqual(saline["dosage"], "")
+        self.assertEqual(saline["dosage_unit"], "")
+        self.assertEqual(saline["next_dose_interval"], "")
+        self.assertContains(page, 'value="Saline Rinse"')
+        self.assertContains(page, 'data-dosage=""')
+        self.assertContains(page, 'data-dosage-unit=""')
+        self.assertContains(page, 'data-next-dose-interval=""')
+
+    def test_resolve_medication_child_bound_post(self):
+        """Bound POST forms resolve child from submitted form data."""
+        from core.forms import MedicationForm
+
+        child_two = models.Child.objects.create(
+            first_name="Child", last_name="Two", birth_date=timezone.localdate()
+        )
+        models.Medication.objects.create(
+            child=child_two,
+            name="Ibuprofen",
+            dosage=2.5,
+            dosage_unit="ml",
+            time=timezone.localtime() - timezone.timedelta(hours=1),
+            next_dose_interval=timezone.timedelta(hours=6),
+        )
+
+        # Invalid POST keeps the form bound and re-renders with suggestions.
+        params = {
+            "child": child_two.id,
+            "name": "",
+            "time": self.localtime_string(),
+        }
+        page = self.c.post("/medication/add/", params)
+        self.assertEqual(page.status_code, 200)
+        form = page.context["form"]
+        self.assertTrue(form.is_bound)
+        self.assertEqual(form._resolve_medication_child(), child_two)
+        names = [s["name"] for s in form.medication_name_suggestions]
+        self.assertIn("Ibuprofen", names)
+        self.assertNotIn("Tylenol", names)
+        self.assertContains(page, 'value="Ibuprofen"')
+        self.assertNotContains(page, 'value="Tylenol"')
+
+        # Direct form construction mirrors the bound-data path.
+        bound = MedicationForm(data=params)
+        self.assertTrue(bound.is_bound)
+        self.assertEqual(bound._resolve_medication_child(), child_two)
+
+    def test_resolve_medication_child_edit_instance(self):
+        """Edit forms resolve child from the medication instance."""
+        from core.forms import MedicationForm
+
+        child_two = models.Child.objects.create(
+            first_name="Child", last_name="Two", birth_date=timezone.localdate()
+        )
+        models.Medication.objects.create(
+            child=child_two,
+            name="Ibuprofen",
+            dosage=2.5,
+            dosage_unit="ml",
+            time=timezone.localtime() - timezone.timedelta(hours=1),
+        )
+
+        page = self.c.get("/medication/{}/".format(self.medication.id))
+        self.assertEqual(page.status_code, 200)
+        form = page.context["form"]
+        self.assertFalse(form.is_bound)
+        self.assertEqual(form.instance.pk, self.medication.pk)
+        # Edit views put the FK pk in initial; resolve may return pk or Child.
+        resolved = form._resolve_medication_child()
+        self.assertEqual(getattr(resolved, "pk", resolved), self.child.pk)
+        names = [s["name"] for s in form.medication_name_suggestions]
+        self.assertIn("Tylenol", names)
+        self.assertNotIn("Ibuprofen", names)
+        self.assertContains(page, 'value="Tylenol"')
+        self.assertNotContains(page, 'value="Ibuprofen"')
+
+        # Force the instance.child path (ModelForm normally mirrors child into
+        # initial from the instance, which would short-circuit earlier).
+        unbound = MedicationForm(instance=self.medication)
+        unbound.initial.pop("child", None)
+        self.assertEqual(unbound._resolve_medication_child(), self.child)
+
+    def test_medication_name_js_wired_in_scripts_config(self):
+        """medication_name.js must ship via scriptsConfig.app (glob or path)."""
+        from pathlib import Path
+
+        config_path = Path("gulpfile.config.js")
+        self.assertTrue(config_path.is_file())
+        config = config_path.read_text()
+        js_path = Path("core/static_src/js/medication_name.js")
+        self.assertTrue(js_path.is_file())
+        wired = (
+            "core/static_src/js/medication_name.js" in config
+            or "core/static_src/js/*.js" in config
+        )
+        self.assertTrue(
+            wired,
+            "medication_name.js missing from gulpfile.config.js scriptsConfig.app",
         )

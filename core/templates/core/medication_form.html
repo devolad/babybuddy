@@ -26,4 +26,15 @@
         <h1>{% trans "Add a Medication Entry" %}</h1>
     {% endif %}
     {% include "babybuddy/form.html" %}
+    {# Child-scoped previous medication names for the name field datalist. #}
+    {% if form.medication_name_suggestions %}
+        <datalist id="medication-name-list">
+            {% for suggestion in form.medication_name_suggestions %}
+                <option value="{{ suggestion.name }}"
+                        data-dosage="{{ suggestion.dosage }}"
+                        data-dosage-unit="{{ suggestion.dosage_unit }}"
+                        data-next-dose-interval="{{ suggestion.next_dose_interval }}"></option>
+            {% endfor %}
+        </datalist>
+    {% endif %}
 {% endblock %}
