@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
+from django.template.loader import render_to_string
 from django.utils import timezone
 
 from babybuddy.models import Settings
@@ -163,7 +164,7 @@ class TemplateTagsTestCase(TestCase):
         self.assertFalse(data["empty"])
         self.assertFalse(data["hide_empty"])
 
-        # most recent day
+        # most recent day (mix of blank + numeric amounts in fixtures)
         self.assertEqual(data["feedings"][0]["total"], 2.5)
         self.assertEqual(data["feedings"][0]["count"], 3)
 
@@ -174,6 +175,116 @@ class TemplateTagsTestCase(TestCase):
         # last day
         self.assertEqual(data["feedings"][-1]["total"], 20.0)
         self.assertEqual(data["feedings"][-1]["count"], 2)
+
+    def _render_feeding_recent(self, feedings):
+        request = RequestFactory().get("/")
+        request.user = get_user_model().objects.first()
+        return render_to_string(
+            "cards/feeding_recent.html",
+            {
+                "feedings": feedings,
+                "type": "feeding",
+                "empty": len(feedings) == 0,
+                "hide_empty": False,
+            },
+            request=request,
+        )
+
+    def test_card_feeding_recent_blanks_only_shows_count(self):
+        """Blank amounts with count>0: total is None; title shows count, not None."""
+        models.Feeding.objects.filter(child=self.child).delete()
+        day = self.date.replace(hour=12, minute=0, second=0, microsecond=0)
+        for offset_minutes in (0, 60, 120):
+            start = day + timezone.timedelta(minutes=offset_minutes)
+            models.Feeding.objects.create(
+                child=self.child,
+                start=start,
+                end=start + timezone.timedelta(minutes=15),
+                type="breast milk",
+                method="left breast",
+                amount=None,
+            )
+
+        data = cards.card_feeding_recent(self.context, self.child, self.date)
+        today = data["feedings"][0]
+        self.assertEqual(today["count"], 3)
+        self.assertIsNone(today["total"])
+
+        html = self._render_feeding_recent([today])
+        self.assertIn("3 feedings", html)
+        # Title should not be the bare "None" for a day with feedings.
+        title_chunk = html.split("last-feeding-method", 1)[1].split("</div>", 1)[0]
+        self.assertNotIn("None", title_chunk)
+        # Count already in title — avoid duplicate noisy subtitle.
+        self.assertEqual(html.count("3 feedings"), 1)
+
+    def test_card_feeding_recent_mix_sums_non_null_amounts(self):
+        """Mix of blanks and amounts: total is sum of non-null; count kept as subtitle."""
+        models.Feeding.objects.filter(child=self.child).delete()
+        day = self.date.replace(hour=10, minute=0, second=0, microsecond=0)
+        specs = [
+            (0, None),
+            (30, 1.5),
+            (60, None),
+            (90, 2.0),
+        ]
+        for offset_minutes, amount in specs:
+            start = day + timezone.timedelta(minutes=offset_minutes)
+            models.Feeding.objects.create(
+                child=self.child,
+                start=start,
+                end=start + timezone.timedelta(minutes=10),
+                type="breast milk",
+                method="bottle" if amount is not None else "left breast",
+                amount=amount,
+            )
+
+        data = cards.card_feeding_recent(self.context, self.child, self.date)
+        today = data["feedings"][0]
+        self.assertEqual(today["count"], 4)
+        self.assertEqual(today["total"], 3.5)
+
+        html = self._render_feeding_recent([today])
+        self.assertIn("3.5", html)
+        self.assertIn("4 feedings", html)
+
+    def test_card_feeding_recent_empty_day_shows_none(self):
+        """Empty day: count==0 and total is None; rendered title is None."""
+        models.Feeding.objects.filter(child=self.child).delete()
+        data = cards.card_feeding_recent(self.context, self.child, self.date)
+        today = data["feedings"][0]
+        self.assertEqual(today["count"], 0)
+        self.assertIsNone(today["total"])
+        self.assertTrue(data["empty"])
+
+        html = self._render_feeding_recent([today])
+        title_chunk = html.split("last-feeding-method", 1)[1].split("</div>", 1)[0]
+        self.assertIn("None", title_chunk)
+
+    def test_card_feeding_recent_numeric_totals_regression(self):
+        """Existing numeric totals still work when every feeding has an amount."""
+        models.Feeding.objects.filter(child=self.child).delete()
+        day = self.date.replace(hour=9, minute=0, second=0, microsecond=0)
+        for offset_minutes, amount in ((0, 1.0), (45, 2.5), (90, 0.0)):
+            start = day + timezone.timedelta(minutes=offset_minutes)
+            models.Feeding.objects.create(
+                child=self.child,
+                start=start,
+                end=start + timezone.timedelta(minutes=10),
+                type="formula",
+                method="bottle",
+                amount=amount,
+            )
+
+        data = cards.card_feeding_recent(self.context, self.child, self.date)
+        today = data["feedings"][0]
+        self.assertEqual(today["count"], 3)
+        # 0.0 is a real amount — total stays numeric (not None)
+        self.assertEqual(today["total"], 3.5)
+
+        html = self._render_feeding_recent([today])
+        self.assertIn("3.5", html)
+        self.assertIn("3 feedings", html)
 
     def test_card_feeding_last(self):
         data = cards.card_feeding_last(self.context, self.child)

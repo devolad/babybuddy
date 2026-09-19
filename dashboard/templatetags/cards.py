@@ -211,7 +211,8 @@ def card_feeding_recent(context, child, end_date=None):
 
     # prepare the result list for the last 7 days
     dates = [end_date - timezone.timedelta(days=i) for i in range(8)]
-    results = [{"date": d, "total": 0, "count": 0} for d in dates]
+    # total is None until at least one feeding that day has an amount
+    results = [{"date": d, "total": None, "count": 0} for d in dates]
 
     # do one pass over the data and add it to the appropriate day
     for instance in instances:
@@ -221,8 +222,11 @@ def card_feeding_recent(context, child, end_date=None):
         )
         idx = (end_date - feed_date).days
         result = results[idx]
-        result["total"] += instance.amount if instance.amount is not None else 0
         result["count"] += 1
+        if instance.amount is not None:
+            if result["total"] is None:
+                result["total"] = 0.0
+            result["total"] += instance.amount
 
     return {
         "feedings": results,

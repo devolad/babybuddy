@@ -12,21 +12,27 @@
                 {% for feeding in feedings %}
                     <div class="carousel-item{% if forloop.counter == 1 %} active{% endif %}">
                         <div class="last-feeding-method text-center">
-                            {% if feeding.total %}
+                            {% if feeding.total is not None %}
                                 {{ feeding.total|floatformat }}
-                            {% else %}
-                                {% trans "None" %}
-                            {% endif %}
-                        </div>
-                        <div class="text-center small">
-                            {% if feeding.count > 0 %}
+                            {% elif feeding.count > 0 %}
                                 {% blocktrans trimmed count counter=feeding.count %}
                                     {{ counter }} feeding
                                 {% plural %}
                                     {{ counter }} feedings
                                 {% endblocktrans %}
+                            {% else %}
+                                {% trans "None" %}
                             {% endif %}
                         </div>
+                        {% if feeding.total is not None and feeding.count > 0 %}
+                            <div class="text-center small">
+                                {% blocktrans trimmed count counter=feeding.count %}
+                                    {{ counter }} feeding
+                                {% plural %}
+                                    {{ counter }} feedings
+                                {% endblocktrans %}
+                            </div>
+                        {% endif %}
                         <div class="text-center small text-body-secondary">{{ feeding.date.date|dayssince }}</div>
                     </div>
                 {% endfor %}
