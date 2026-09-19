@@ -190,18 +190,24 @@ class TemplateTagsTestCase(TestCase):
             request=request,
         )
 
-    def test_card_feeding_recent_blanks_only_shows_count(self):
-        """Blank amounts with count>0: total is None; title shows count, not None."""
+    def test_card_feeding_recent_blanks_only_shows_last_type(self):
+        """Blank amounts with count>0: total None; title is last type, count stays under."""
         models.Feeding.objects.filter(child=self.child).delete()
         day = self.date.replace(hour=12, minute=0, second=0, microsecond=0)
-        for offset_minutes in (0, 60, 120):
+        # Chronologically last that day is formula — title must use that type display.
+        specs = [
+            (0, "breast milk", "left breast"),
+            (60, "breast milk", "right breast"),
+            (120, "formula", "bottle"),
+        ]
+        for offset_minutes, feeding_type, method in specs:
             start = day + timezone.timedelta(minutes=offset_minutes)
             models.Feeding.objects.create(
                 child=self.child,
                 start=start,
                 end=start + timezone.timedelta(minutes=15),
-                type="breast milk",
-                method="left breast",
+                type=feeding_type,
+                method=method,
                 amount=None,
             )
 
@@ -209,14 +215,16 @@ class TemplateTagsTestCase(TestCase):
         today = data["feedings"][0]
         self.assertEqual(today["count"], 3)
         self.assertIsNone(today["total"])
+        self.assertEqual(today["last_type_display"], "Formula")
 
         html = self._render_feeding_recent([today])
-        self.assertIn("3 feedings", html)
-        # Title should not be the bare "None" for a day with feedings.
         title_chunk = html.split("last-feeding-method", 1)[1].split("</div>", 1)[0]
+        self.assertIn("Formula", title_chunk)
         self.assertNotIn("None", title_chunk)
-        # Count already in title — avoid duplicate noisy subtitle.
-        self.assertEqual(html.count("3 feedings"), 1)
+        # Do not promote count into the big title.
+        self.assertNotIn("3 feedings", title_chunk)
+        # Count under the card unchanged.
+        self.assertIn("3 feedings", html)
 
     def test_card_feeding_recent_mix_sums_non_null_amounts(self):
         """Mix of blanks and amounts: total is sum of non-null; count kept as subtitle."""
@@ -243,6 +251,7 @@ class TemplateTagsTestCase(TestCase):
         today = data["feedings"][0]
         self.assertEqual(today["count"], 4)
         self.assertEqual(today["total"], 3.5)
+        self.assertIsNone(today["last_type_display"])
 
         html = self._render_feeding_recent([today])
         self.assertIn("3.5", html)
@@ -255,6 +264,7 @@ class TemplateTagsTestCase(TestCase):
         today = data["feedings"][0]
         self.assertEqual(today["count"], 0)
         self.assertIsNone(today["total"])
+        self.assertIsNone(today["last_type_display"])
         self.assertTrue(data["empty"])
 
         html = self._render_feeding_recent([today])
@@ -281,6 +291,7 @@ class TemplateTagsTestCase(TestCase):
         self.assertEqual(today["count"], 3)
         # 0.0 is a real amount — total stays numeric (not None)
         self.assertEqual(today["total"], 3.5)
+        self.assertIsNone(today["last_type_display"])
 
         html = self._render_feeding_recent([today])
         self.assertIn("3.5", html)

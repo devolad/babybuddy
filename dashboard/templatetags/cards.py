@@ -212,7 +212,16 @@ def card_feeding_recent(context, child, end_date=None):
     # prepare the result list for the last 7 days
     dates = [end_date - timezone.timedelta(days=i) for i in range(8)]
     # total is None until at least one feeding that day has an amount
-    results = [{"date": d, "total": None, "count": 0} for d in dates]
+    results = [
+        {
+            "date": d,
+            "total": None,
+            "count": 0,
+            "last_type_display": None,
+            "_last_end": None,
+        }
+        for d in dates
+    ]
 
     # do one pass over the data and add it to the appropriate day
     for instance in instances:
@@ -227,6 +236,16 @@ def card_feeding_recent(context, child, end_date=None):
             if result["total"] is None:
                 result["total"] = 0.0
             result["total"] += instance.amount
+        # chronologically last feeding that day (by end) — type for blank-amount title
+        if result["_last_end"] is None or instance.end > result["_last_end"]:
+            result["_last_end"] = instance.end
+            result["last_type_display"] = instance.get_type_display()
+
+    for result in results:
+        result.pop("_last_end", None)
+        # only expose type fallback when the amount line would otherwise be None
+        if result["total"] is not None or result["count"] == 0:
+            result["last_type_display"] = None
 
     return {
         "feedings": results,

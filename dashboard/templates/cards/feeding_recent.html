@@ -14,25 +14,21 @@
                         <div class="last-feeding-method text-center">
                             {% if feeding.total is not None %}
                                 {{ feeding.total|floatformat }}
-                            {% elif feeding.count > 0 %}
-                                {% blocktrans trimmed count counter=feeding.count %}
-                                    {{ counter }} feeding
-                                {% plural %}
-                                    {{ counter }} feedings
-                                {% endblocktrans %}
+                            {% elif feeding.last_type_display %}
+                                {{ feeding.last_type_display }}
                             {% else %}
                                 {% trans "None" %}
                             {% endif %}
                         </div>
-                        {% if feeding.total is not None and feeding.count > 0 %}
-                            <div class="text-center small">
+                        <div class="text-center small">
+                            {% if feeding.count > 0 %}
                                 {% blocktrans trimmed count counter=feeding.count %}
                                     {{ counter }} feeding
                                 {% plural %}
                                     {{ counter }} feedings
                                 {% endblocktrans %}
-                            </div>
-                        {% endif %}
+                            {% endif %}
+                        </div>
                         <div class="text-center small text-body-secondary">{{ feeding.date.date|dayssince }}</div>
                     </div>
                 {% endfor %}
